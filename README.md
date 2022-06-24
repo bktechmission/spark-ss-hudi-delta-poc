@@ -32,7 +32,7 @@ How to run in local mode?
 ### Build Locally
 `1. git clone git@github.com:bktechmission/spark-ss-hudi-delta-poc.git`
 
-`2. mvn clean install`
+`2. cd spark-ss-hudi-delta-poc/; mvn clean install`
 
 `3. Open Intellij, point to pom.xml in the project dir`
 
@@ -41,7 +41,7 @@ How to run in local mode?
 1. **Parquet write:** Right click and run S3ToParquetStreamJob
 2. **Hudi write:** Right click and run S3ToHudiOptStreamJob
 3. **Delta write:** Right click and run S3ToDeltaStreamJob
-
+Program Argument: local
 
 **NOTE:**
 1. Please make sure to update application.conf with your development.normv2.* settings like s3 paths and access/secret keys.
