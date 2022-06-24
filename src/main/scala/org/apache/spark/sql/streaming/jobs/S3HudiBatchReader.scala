@@ -29,6 +29,7 @@ object S3HudiBatchReader extends Logging {
       .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
       .config("spark.hadoop.fs.s3a.endpoint", "s3.amazonaws.com")
       .config("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
+      .config("spark.dynamicAllocation.enabled", "false")
       .getOrCreate()
     spark.sparkContext.setLogLevel(Config().getString("normv2.loggerLevel"))
     import spark.sqlContext.implicits._
