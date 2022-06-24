@@ -1,7 +1,7 @@
 Spark Structure Streaming on Data Lake
 ===================================== 
-Spark Structure Streaming 
-Source S3 Files or SNS SQS Stream and Sink S3 with format Parquet/Delta/Hudi
+This is a Spark Structure Streaming Solution which uses source either
+S3 Bucket Location or a SQS Name and Sink as S3 with formats can be any Parquet or Delta or Hudi
 
 
 Details
