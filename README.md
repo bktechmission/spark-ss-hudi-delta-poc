@@ -84,8 +84,11 @@ Just to check counts matches with Files on Local Disk and S3 written files.
 ### Fault Testing
 1. I ran code inside Intellij.
 2. Data used: spark-ss-hudi-delta-poc/data/unique_srno/*.csv
+   1. Total rows 31102 
+   2. Total Stock Codes agg_df.count: 2657 distinct:2657
 3. Run all 3 one at a time S3ToParquetStreamJob, S3ToHudiOptStreamJob, S3ToDeltaStreamJob
 4. Make sure to stop and start Spark Jobs multiple times.
+5. maxFilesPerTrigger: 5 inside your application.conf
 
 **For Hudi Data Duplication Repro:** 
 1. Stop S3ToHudiOptStreamJob whenever you see on Intellij console logs 'INFO HoodieStreamingSink: Micro batch id='
@@ -95,9 +98,45 @@ NOTE: Hudi PrimaryKey is UUID, which is getting generated in S3ToHudiOptStreamJo
 
 I did not see other 2 format Duplicating Data. Only Hudi was not doing Exactly Once if UUID is generated inside Spark Code.
 
+**Result:**
+**1. S3ToParquetStreamJob**
 
+**Repro Fault:** Kill job when ._spark_metadata/ has commit and no commit in checkpoint/commit/
 
+**Readers Count:**
 
+`parq_df.count 31102`
+
+`agg_parq.count: 2657 distinct:2657`
+
+`Total parquet show time: 23seconds`
+
+**2. S3ToDeltaStreamJob**
+**Repro Fault:** Kill job when _delta_log/ has .json or checkpoint/commit/ just started writing commit
+   
+**Readers Count:**
+
+`delta_df.count 31102`
+
+`agg_delta.count: 2657 distinct:2657`
+
+`Total delta show time: 35seconds`
+
+**3. S3ToHudiOptStreamJob**
+
+**Repro Fault:** Kill job when .hoodie has commit and no commit in checkpoint/commit/
+   
+**Readers Count:**
+
+`hudi_df.count 57834`
+
+`agg_hd.count: 2657 distinct:2657`      
+`Distinct StockCode remain same, that means we added more records`
+
+`Total hudi show time: 48seconds`
+
+### On EMR Reader Run
+`spark-submit --master yarn --deploy-mode client --num-executors 12 --executor-memory 1g --driver-memory 1g --executor-cores 2 --conf 'spark.driver.extraClassPath=/etc/hadoop/conf:/etc/hive/conf:/usr/lib/hadoop-lzo/lib/*:/usr/share/aws/aws-java-sdk/*' --conf 'spark.executor.extraClassPath=/etc/hadoop/conf:/etc/hive/conf:/usr/lib/hadoop-lzo/lib/*:/usr/share/aws/aws-java-sdk/*' --packages io.delta:delta-core_2.12:1.2.1 --conf 'spark.sql.extensions=io.delta.sql.DeltaSparkSessionExtension' --conf 'spark.sql.catalog.spark_catalog=org.apache.spark.sql.delta.catalog.DeltaCatalog' --class org.apache.spark.sql.streaming.jobs.S3HudiBatchReader s3://bhupis3test1/normv2-poc-1.0-SNAPSHOT.jar emr`
 
 
 
