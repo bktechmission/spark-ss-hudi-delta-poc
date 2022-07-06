@@ -75,25 +75,32 @@ object S3ToHudiOptStreamJob extends Logging {
 
     // Create and start query, write in 2 modes Plain Parquet and Hudi
     //L Load: Loading Data back to Data Lake S3
+    // Bulk Insert https://github.com/apache/hudi/issues/2639
+    //https://www.onehouse.ai/blog/apache-hudi-vs-delta-lake-transparent-tpc-ds-lakehouse-performance-benchmarks
+
     val query = augdf
       .writeStream
-      .format("org.apache.hudi")
-      .option("hoodie.table.name", "defsec.invoices_hudis3list")
-      .option(TABLE_TYPE.key, "COPY_ON_WRITE")
-      .option(RECORDKEY_FIELD.key, "UUID")
-      .option(PRECOMBINE_FIELD.key, "NormalizedTimestamp")
-      .option(PARTITIONPATH_FIELD.key, "Date,Country")
-      .option(STREAMING_IGNORE_FAILED_BATCH.key, "false")
-      .option(KEYGENERATOR_CLASS_NAME.key, classOf[ComplexKeyGenerator].getName)
-      .option(HIVE_PARTITION_EXTRACTOR_CLASS_OPT_KEY, classOf[MultiPartKeysValueExtractor].getName)
-      .option(HIVE_PARTITION_FIELDS.key, "Date,Country")
-      .option(STREAMING_RETRY_CNT.key, 0)
-      .option(OPERATION.key, BULK_INSERT_OPERATION_OPT_VAL)
+      .format("hudi")
+      .option(RECORDKEY_FIELD.key(), "UUID")
+      .option(PRECOMBINE_FIELD.key(), "NormalizedTimestamp")
+      .option(PARTITIONPATH_FIELD.key(), "Date,Country")
+      .option(KEYGENERATOR_CLASS_NAME.key(), classOf[ComplexKeyGenerator].getName())
+      .option("hoodie.datasource.write.row.writer.enable", "false")
+      .option("hoodie.table.name", "defsec_hudis3list")
+      .option("hoodie.datasource.write.table.name", "defsec_hudis3list")
+      .option("hoodie.datasource.write.hive_style_partitioning", "true")
+      .option("hoodie.datasource.write.operation", "bulk_insert")
+      .option("hoodie.combine.before.insert", "false")
       .option("hoodie.bulkinsert.sort.mode", "NONE")
       .option("hoodie.parquet.compression.codec", "snappy")
+      .option("hoodie.parquet.writelegacyformat.enabled", "false")
+      .option("hoodie.populate.meta.fields", "false")
+      .option("hoodie.metadata.enable", "false")
+      .option("hoodie.parquet.max.file.size", "141557760") // 135Mb
+      .option("hoodie.parquet.block.size", "141557760") // 135Mb
       .queryName("s3ToHudiOptStreamJob")
-      .option("checkpointLocation", Config().getString("normv2.checkpointLocation")+"hudis3list_opt_emr/")
-      .option("path", Config().getString("normv2.sinkPath")+"hudis3list_opt_emr/")
+      .option("checkpointLocation", Config().getString("normv2.checkpointLocation")+"hudis3list_opt/")
+      .option("path", Config().getString("normv2.sinkPath")+"hudis3list_opt/")
       .outputMode(OutputMode.Append())
       .start()
 

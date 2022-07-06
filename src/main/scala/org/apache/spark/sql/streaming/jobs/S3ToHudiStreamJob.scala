@@ -85,9 +85,8 @@ object S3ToHudiStreamJob extends Logging {
     */
     val query = augdf
       .writeStream
-      .format("org.apache.hudi")
-      .option("hoodie.table.name", "defsec.invoices_hudis3list")
-      .option(TABLE_TYPE.key, "COPY_ON_WRITE")
+      .format("hudi")
+      .option("hoodie.table.name", "defsec_hudis3list")
       .option(RECORDKEY_FIELD.key, "UUID")
       .option(PRECOMBINE_FIELD.key, "NormalizedTimestamp")
       .option(PARTITIONPATH_FIELD.key, "Date,Country")
@@ -97,8 +96,8 @@ object S3ToHudiStreamJob extends Logging {
       .option(HIVE_PARTITION_FIELDS.key, "Date,Country")
       .option(STREAMING_RETRY_CNT.key, 0)
       .queryName("s3ToHudiStreamJob")
-      .option("checkpointLocation", Config().getString("normv2.checkpointLocation")+"hudis3list_emr/")
-      .option("path", Config().getString("normv2.sinkPath")+"hudis3list_emr/")
+      .option("checkpointLocation", Config().getString("normv2.checkpointLocation")+"hudis3list/")
+      .option("path", Config().getString("normv2.sinkPath")+"hudis3list/")
       .outputMode(OutputMode.Append())
       .start()
 
@@ -125,7 +124,7 @@ object S3ToHudiStreamJob extends Logging {
 
     println(LocalDateTime.now() + "Start writing Hudi table")
     batchDF.write
-      .format("org.apache.hudi")
+      .format("hudi")
       .options(hudiOptions)
       .mode(SaveMode.Append)
       .save(Config().getString("normv2.sinkPath")+"hudi")

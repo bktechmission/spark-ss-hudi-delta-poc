@@ -38,7 +38,7 @@ object S3HudiBatchReader extends Logging {
     var stTime = System.currentTimeMillis();
     val delta_df = spark.read
       .format("delta")
-      .load(Config().getString("normv2.sinkPath")+"deltas3list_emr/")
+      .load(Config().getString("normv2.sinkPath")+"deltas3list/")
 
     println("Total records delta_df.count "+ delta_df.count)
     val agg_delta = delta_df.groupBy($"StockCode").count()
@@ -52,7 +52,7 @@ object S3HudiBatchReader extends Logging {
     stTime = System.currentTimeMillis();
     val hudi_df = spark.read
       .format("org.apache.hudi")
-      .load(Config().getString("normv2.sinkPath")+"hudis3list_opt_emr/")
+      .load(Config().getString("normv2.sinkPath")+"hudis3list_opt/")
 
     println("Total records hudi_df.count "+ hudi_df.count)
     val agg_hd = hudi_df.groupBy($"StockCode").count()
@@ -68,7 +68,7 @@ object S3HudiBatchReader extends Logging {
     stTime = System.currentTimeMillis();
     val parq_df = spark.read
       .format("parquet")
-      .load(Config().getString("normv2.sinkPath")+"parquets3list_emr/")
+      .load(Config().getString("normv2.sinkPath")+"parquets3list/")
 
     println("Total records parq_df.count "+ parq_df.count)
     val agg_parq = parq_df.groupBy($"StockCode").count()

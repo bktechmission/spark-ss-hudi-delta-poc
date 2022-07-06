@@ -75,8 +75,8 @@ object S3ToDeltaStreamJob extends Logging {
       .writeStream
      .format("delta")
      .partitionBy("Date", "Country")
-     .option("checkpointLocation", Config().getString("normv2.checkpointLocation")+"deltas3list_emr/")
-     .option("path", Config().getString("normv2.sinkPath")+"deltas3list_emr/")
+     .option("checkpointLocation", Config().getString("normv2.checkpointLocation")+"deltas3list/")
+     .option("path", Config().getString("normv2.sinkPath")+"deltas3list/")
      .outputMode(OutputMode.Append())
      .start()
     spark.streams.awaitAnyTermination()

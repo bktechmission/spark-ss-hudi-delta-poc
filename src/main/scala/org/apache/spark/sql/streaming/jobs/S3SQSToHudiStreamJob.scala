@@ -106,8 +106,8 @@ object S3SQSToHudiStreamJob extends Logging {
       .option(HIVE_PARTITION_FIELDS.key, "Date,Country")
       .option(STREAMING_RETRY_CNT.key, 0)
       .queryName("s3SQSToHudiStreamJob")
-      .option("checkpointLocation", Config().getString("normv2.checkpointLocation")+"hudis3sqs_emr/")
-      .option("path", Config().getString("normv2.sinkPath")+"hudis3sqs_emr/")
+      .option("checkpointLocation", Config().getString("normv2.checkpointLocation")+"hudis3sqs/")
+      .option("path", Config().getString("normv2.sinkPath")+"hudis3sqs/")
       .outputMode(OutputMode.Append())
       .start()
 

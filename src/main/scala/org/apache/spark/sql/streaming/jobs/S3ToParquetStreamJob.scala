@@ -75,8 +75,8 @@ object S3ToParquetStreamJob extends Logging {
       .writeStream
      .format("parquet")
      .partitionBy("Date", "Country")
-     .option("checkpointLocation", Config().getString("normv2.checkpointLocation")+"parquets3list_emr/")
-     .option("path", Config().getString("normv2.sinkPath")+"parquets3list_emr/")
+     .option("checkpointLocation", Config().getString("normv2.checkpointLocation")+"parquets3list/")
+     .option("path", Config().getString("normv2.sinkPath")+"parquets3list/")
      .outputMode(OutputMode.Append())
      .start()
     spark.streams.awaitAnyTermination()
