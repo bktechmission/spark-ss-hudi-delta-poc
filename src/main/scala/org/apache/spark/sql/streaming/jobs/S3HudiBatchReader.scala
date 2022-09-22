@@ -79,5 +79,6 @@ object S3HudiBatchReader extends Logging {
     println("Total parq_df srno count > 1: ")
     val srnoaggparq= parq_df.groupBy($"srno").count().where($"count">1)
     srnoaggparq.show()
+
   }
 }

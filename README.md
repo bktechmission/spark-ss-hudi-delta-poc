@@ -58,13 +58,17 @@ Program Argument: local
 
 ### How to run on EMR mode?
 **Parquet write:**
-`spark-submit --master yarn --deploy-mode client --num-executors 12 --executor-memory 1g --driver-memory 1g --executor-cores 2 --conf spark.driver.extraClassPath=/etc/hadoop/conf:/etc/hive/conf:/usr/lib/hadoop-lzo/lib/*:/usr/share/aws/aws-java-sdk/* --conf spark.executor.extraClassPath=/etc/hadoop/conf:/etc/hive/conf:/usr/lib/hadoop-lzo/lib/*:/usr/share/aws/aws-java-sdk/* --class org.apache.spark.sql.streaming.jobs.S3ToParquetStreamJob s3://bhupis3test1/normv2-poc-1.0-SNAPSHOT.jar emr`
+`spark-submit --master yarn --deploy-mode client --num-executors 12 --executor-memory 1g --driver-memory 1g --executor-cores 2 --conf 'spark.driver.extraClassPath=/etc/hadoop/conf:/etc/hive/conf:/usr/lib/hadoop-lzo/lib/*:/usr/share/aws/aws-java-sdk/*' --conf 'spark.executor.extraClassPath=/etc/hadoop/conf:/etc/hive/conf:/usr/lib/hadoop-lzo/lib/*:/usr/share/aws/aws-java-sdk/*' --class org.apache.spark.sql.streaming.jobs.S3ToParquetStreamJob s3://bhupis3test2/normv2-poc-1.0-SNAPSHOT.jar emr`
 
 **Hudi write:**
-`spark-submit --master yarn --deploy-mode client --num-executors 12 --executor-memory 1g --driver-memory 1g --executor-cores 2 --conf 'spark.driver.extraClassPath=/etc/hadoop/conf:/etc/hive/conf:/usr/lib/hadoop-lzo/lib/*:/usr/share/aws/aws-java-sdk/*' --conf 'spark.executor.extraClassPath=/etc/hadoop/conf:/etc/hive/conf:/usr/lib/hadoop-lzo/lib/*:/usr/share/aws/aws-java-sdk/*' --class org.apache.spark.sql.streaming.jobs.S3ToHudiOptStreamJob --packages 'org.apache.hudi:hudi-spark3.2-bundle_2.12:0.11.1' --conf 'spark.sql.extensions=org.apache.spark.sql.hudi.HoodieSparkSessionExtension' --conf 'spark.sql.catalog.spark_catalog=org.apache.spark.sql.hudi.catalog.HoodieCatalog' s3://bhupis3test1/normv2-poc-1.0-SNAPSHOT.jar emr`
+`spark-submit --master yarn --deploy-mode client --num-executors 12 --executor-memory 1g --driver-memory 1g --executor-cores 2 --conf 'spark.driver.extraClassPath=/etc/hadoop/conf:/etc/hive/conf:/usr/lib/hadoop-lzo/lib/*:/usr/share/aws/aws-java-sdk/*' --conf 'spark.executor.extraClassPath=/etc/hadoop/conf:/etc/hive/conf:/usr/lib/hadoop-lzo/lib/*:/usr/share/aws/aws-java-sdk/*' --class org.apache.spark.sql.streaming.jobs.S3ToHudiOptStreamJob --conf 'spark.jars=/home/hadoop/hudi-spark3-bundle_2.12-0.11.1.jar' --conf 'spark.sql.extensions=org.apache.spark.sql.hudi.HoodieSparkSessionExtension' --conf 'spark.sql.catalog.spark_catalog=org.apache.spark.sql.hudi.catalog.HoodieCatalog' s3://bhupis3test2/normv2-poc-1.0-SNAPSHOT.jar emr`
 
 **Delta write:**
-`spark-submit --master yarn --deploy-mode client --num-executors 12 --executor-memory 1g --driver-memory 1g --executor-cores 2 --conf 'spark.driver.extraClassPath=/etc/hadoop/conf:/etc/hive/conf:/usr/lib/hadoop-lzo/lib/*:/usr/share/aws/aws-java-sdk/*' --conf 'spark.executor.extraClassPath=/etc/hadoop/conf:/etc/hive/conf:/usr/lib/hadoop-lzo/lib/*:/usr/share/aws/aws-java-sdk/*' --class org.apache.spark.sql.streaming.jobs.S3ToDeltaStreamJob --packages 'io.delta:delta-core_2.12:2.0.0rc1' --conf 'spark.sql.extensions=io.delta.sql.DeltaSparkSessionExtension' --conf 'spark.sql.catalog.spark_catalog=org.apache.spark.sql.delta.catalog.DeltaCatalog' s3://bhupis3test1/normv2-poc-1.0-SNAPSHOT.jar emr`
+`spark-submit --master yarn --deploy-mode client --num-executors 12 --executor-memory 1g --driver-memory 1g --executor-cores 2 --conf 'spark.driver.extraClassPath=/etc/hadoop/conf:/etc/hive/conf:/usr/lib/hadoop-lzo/lib/*:/usr/share/aws/aws-java-sdk/*' --conf 'spark.executor.extraClassPath=/etc/hadoop/conf:/etc/hive/conf:/usr/lib/hadoop-lzo/lib/*:/usr/share/aws/aws-java-sdk/*' --class org.apache.spark.sql.streaming.jobs.S3ToDeltaStreamJob --conf 'spark.jars=/home/hadoop/delta-core_2.12-2.1.0.jar' --conf 'spark.sql.extensions=io.delta.sql.DeltaSparkSessionExtension' --conf 'spark.sql.catalog.spark_catalog=org.apache.spark.sql.delta.catalog.DeltaCatalog' s3://bhupis3test2/normv2-poc-1.0-SNAPSHOT.jar emr`
+
+**Iceberg write:**
+`spark-submit --master yarn --deploy-mode client --num-executors 12 --executor-memory 1g --driver-memory 1g --executor-cores 2 --conf 'spark.driver.extraClassPath=/etc/hadoop/conf:/etc/hive/conf:/usr/lib/hadoop-lzo/lib/*:/usr/share/aws/aws-java-sdk/*' --conf 'spark.executor.extraClassPath=/etc/hadoop/conf:/etc/hive/conf:/usr/lib/hadoop-lzo/lib/*:/usr/share/aws/aws-java-sdk/*' --class org.apache.spark.sql.streaming.jobs.S3ToIcebergStreamJob --conf 'spark.jars=/home/hadoop/iceberg-spark-runtime-3.2_2.12-0.14.1.jar,/home/hadoop/bundle-2.17.257.jar,/home/hadoop/url-connection-client-2.17.257.jar' --conf 'spark.sql.catalog.glue_catalog=org.apache.iceberg.spark.SparkCatalog' --conf 'spark.sql.catalog.glue_catalog.catalog-impl=org.apache.iceberg.aws.glue.GlueCatalog' --conf 'spark.sql.catalog.glue_catalog.io-impl=org.apache.iceberg.aws.s3.S3FileIO' --conf 'spark.sql.catalog.glue_catalog.warehouse=s3://bhupiiceberg/csvglue' --conf 'spark.sql.extensions=org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions' s3://bhupis3test2/normv2-poc-1.0-SNAPSHOT.jar emr`
+
 
 ### Readers
 Just to check counts matches with Files on Local Disk and S3 written files.
@@ -73,12 +77,13 @@ Just to check counts matches with Files on Local Disk and S3 written files.
 
 ### Perf Testing
 1. For Perf Testing I used files from spark-ss-hudi-delta-poc/data/retail-data/*.csv, which are 305 files, please upload all of them to a clean S3 bucket. 
-2. maxFilesPerTrigger: 100 inside your application.conf
+2. maxFilesPerTrigger: 100 inside your application.conf (4 batches : 100,100,100,5 files)
 3. Follow run on EMR steps for all 3 formats.
+4. EMR Infra used: 1 Master r5.2xlarge and 3 Core r5.4xlarge
 
 **Result:**
-1. Parquet is 8x Faster than Hudi
-2. Delta is 2x Faster than Hudi
+1. Parquet is 7x Faster than Hudi
+2. Delta is 3.2x faster than bulk insert Hudi and 4.3x faster than non bulk insert Hudi
 
 
 ### Fault Testing
@@ -97,30 +102,30 @@ Just to check counts matches with Files on Local Disk and S3 written files.
 NOTE: Hudi PrimaryKey is UUID, which is getting generated in S3ToHudiOptStreamJob, so technically each Stop/Start will generate a different UUID
 
 I did not see other 2 format Duplicating Data. Only Hudi was not doing Exactly Once if UUID is generated inside Spark Code.
-
-**Result:**
-**1. S3ToParquetStreamJob**
-
 **Repro Fault:** Kill job when ._spark_metadata/ has commit and no commit in checkpoint/commit/
+
+
+**PERF Result:**
+**1. S3ToParquetStreamJob**
 
 **Readers Count:**
 
-`parq_df.count 31102`
+`parq_df.count 541909`
 
-`agg_parq.count: 2657 distinct:2657`
+`agg_parq.count: 4070 distinct:4070`
 
-`Total parquet show time: 23seconds`
+`Total parquet show time: 62seconds`
 
 **2. S3ToDeltaStreamJob**
 **Repro Fault:** Kill job when _delta_log/ has .json or checkpoint/commit/ just started writing commit
    
 **Readers Count:**
 
-`delta_df.count 31102`
+`delta_df.count 541909`
 
-`agg_delta.count: 2657 distinct:2657`
+`agg_delta.count: 4070 distinct:4070`
 
-`Total delta show time: 35seconds`
+`Total delta show time: 85seconds`
 
 **3. S3ToHudiOptStreamJob**
 
@@ -128,15 +133,88 @@ I did not see other 2 format Duplicating Data. Only Hudi was not doing Exactly O
    
 **Readers Count:**
 
-`hudi_df.count 57834`
+`hudi_df.count 541909`
 
-`agg_hd.count: 2657 distinct:2657`      
-`Distinct StockCode remain same, that means we added more records`
+`agg_hd.count: 4070 distinct:4070`
 
-`Total hudi show time: 48seconds`
+`Total hudi show time: 78seconds`
+
+**4. S3ToIcebergStreamJob**
+
+**Readers Count:**
+
+`ice_df.count 541909`
+
+`agg_ice.count: 4070 distinct:4070`
+
+`Total iceberg show time: 63seconds`
+
 
 ### On EMR Reader Run
-`spark-submit --master yarn --deploy-mode client --num-executors 12 --executor-memory 1g --driver-memory 1g --executor-cores 2 --conf 'spark.driver.extraClassPath=/etc/hadoop/conf:/etc/hive/conf:/usr/lib/hadoop-lzo/lib/*:/usr/share/aws/aws-java-sdk/*' --conf 'spark.executor.extraClassPath=/etc/hadoop/conf:/etc/hive/conf:/usr/lib/hadoop-lzo/lib/*:/usr/share/aws/aws-java-sdk/*' --packages io.delta:delta-core_2.12:1.2.1 --conf 'spark.sql.extensions=io.delta.sql.DeltaSparkSessionExtension' --conf 'spark.sql.catalog.spark_catalog=org.apache.spark.sql.delta.catalog.DeltaCatalog' --class org.apache.spark.sql.streaming.jobs.S3HudiBatchReader s3://bhupis3test1/normv2-poc-1.0-SNAPSHOT.jar emr`
+#### Reader Delta, Parq, Hudi
+`spark-submit --master yarn --deploy-mode client --num-executors 12 --executor-memory 1g --driver-memory 1g --executor-cores 2 --conf 'spark.driver.extraClassPath=/etc/hadoop/conf:/etc/hive/conf:/usr/lib/hadoop-lzo/lib/*:/usr/share/aws/aws-java-sdk/*' --conf 'spark.executor.extraClassPath=/etc/hadoop/conf:/etc/hive/conf:/usr/lib/hadoop-lzo/lib/*:/usr/share/aws/aws-java-sdk/*' --conf 'spark.jars=/home/hadoop/delta-core_2.12-2.1.0.jar,/home/hadoop/hudi-spark3-bundle_2.12-0.11.1.jar' --conf 'spark.sql.extensions=io.delta.sql.DeltaSparkSessionExtension,org.apache.spark.sql.hudi.HoodieSparkSessionExtension' --conf 'spark.sql.catalog.spark_catalog=org.apache.spark.sql.delta.catalog.DeltaCatalog' --class org.apache.spark.sql.streaming.jobs.S3HudiBatchReader s3://bhupis3test2/normv2-poc-1.0-SNAPSHOT.jar emr`
+
+#### Reader Iceberg
+`spark-submit --master yarn --deploy-mode client --num-executors 12 --executor-memory 1g --driver-memory 1g --executor-cores 2 --conf 'spark.driver.extraClassPath=/etc/hadoop/conf:/etc/hive/conf:/usr/lib/hadoop-lzo/lib/*:/usr/share/aws/aws-java-sdk/*' --conf 'spark.executor.extraClassPath=/etc/hadoop/conf:/etc/hive/conf:/usr/lib/hadoop-lzo/lib/*:/usr/share/aws/aws-java-sdk/*' --conf 'spark.jars=/home/hadoop/iceberg-spark-runtime-3.2_2.12-0.14.1.jar,/home/hadoop/bundle-2.17.257.jar,/home/hadoop/url-connection-client-2.17.257.jar' --conf 'spark.sql.catalog.glue_catalog=org.apache.iceberg.spark.SparkCatalog' --conf 'spark.sql.catalog.glue_catalog.catalog-impl=org.apache.iceberg.aws.glue.GlueCatalog' --conf 'spark.sql.catalog.glue_catalog.io-impl=org.apache.iceberg.aws.s3.S3FileIO' --conf 'spark.sql.catalog.glue_catalog.warehouse=s3://bhupiiceberg/csvglue' --conf 'spark.sql.extensions=org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions' --class org.apache.spark.sql.streaming.jobs.S3IceBatchReader s3://bhupis3test2/normv2-poc-1.0-SNAPSHOT.jar emr`
+
+### Iceberg Table Creation
+#### Create AWS Glue Table
+spark-sql --conf 'spark.jars=/home/hadoop/iceberg-spark-runtime-3.2_2.12-0.14.1.jar,/home/hadoop/bundle-2.17.257.jar,/home/hadoop/url-connection-client-2.17.257.jar' \
+--conf 'spark.sql.catalog.glue_catalog=org.apache.iceberg.spark.SparkCatalog' \
+--conf 'spark.sql.catalog.glue_catalog.catalog-impl=org.apache.iceberg.aws.glue.GlueCatalog' \
+--conf 'spark.sql.catalog.glue_catalog.io-impl=org.apache.iceberg.aws.s3.S3FileIO' \
+--conf 'spark.sql.catalog.glue_catalog.warehouse=s3://bhupiiceberg/csvglue' \
+--conf 'spark.sql.extensions=org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions'
+
+CREATE DATABASE IF NOT EXISTS retaildb;
+or
+CREATE SCHEMA retaildb;
+
+CREATE TABLE glue_catalog.retaildb.csvgluetable (
+srno int,
+InvoiceNo int,
+StockCode string,
+Description string,
+Quantity int,
+InvoiceDate timestamp,
+UnitPrice double,
+CustomerID double,
+Country string,
+InvoiceTimestamp timestamp,
+EventTimestamp timestamp,
+Date date,
+NormalizedTimestamp timestamp,
+UUID string
+)
+USING iceberg
+LOCATION 's3://bhupiiceberg/csvglue'
+PARTITIONED BY (Date, Country);
 
 
-
+### EMR Settings
+`{
+"Classification": "spark-defaults",
+"Properties": {
+"spark.executor.heartbeatInterval": "30s",
+"spark.rdd.compress" : "true",
+"spark.network.timeout" : "360s",
+"spark.history.fs.cleaner.interval" : "3h",
+"spark.history.fs.cleaner.enabled" : "true",
+"spark.history.fs.cleaner.maxAge": "1d",
+"spark.hadoop.hive.metastore.client.factory.class": "com.amazonaws.glue.catalog.metastore.AWSGlueDataCatalogHiveClientFactory"
+}
+},
+{
+"Classification": "hive-site",
+"Properties": {
+"hive.metastore.client.factory.class": "com.amazonaws.glue.catalog.metastore.AWSGlueDataCatalogHiveClientFactory",
+"hive.metastore.schema.verification": "false",
+"hive.metastore.warehouse.dir": "s3://bhupiiceberg/csvdata"
+}
+},
+{
+"Classification": "spark-hive-site",
+"Properties": {
+"hive.metastore.client.factory.class": "com.amazonaws.glue.catalog.metastore.AWSGlueDataCatalogHiveClientFactory"
+}
+}`

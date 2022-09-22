@@ -4,9 +4,11 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.expressions.UserDefinedFunction
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.streaming.OutputMode
+import org.apache.spark.sql.streaming.{OutputMode, Trigger}
 import org.apache.spark.sql.streaming.utils.Config
 import org.apache.spark.sql.types._
+
+import java.util.concurrent.TimeUnit
 
 object S3ToDeltaStreamJob extends Logging {
 
@@ -75,6 +77,7 @@ object S3ToDeltaStreamJob extends Logging {
       .writeStream
      .format("delta")
      .partitionBy("Date", "Country")
+     .trigger(Trigger.ProcessingTime(20, TimeUnit.SECONDS))
      .option("checkpointLocation", Config().getString("normv2.checkpointLocation")+"deltas3list/")
      .option("path", Config().getString("normv2.sinkPath")+"deltas3list/")
      .outputMode(OutputMode.Append())
