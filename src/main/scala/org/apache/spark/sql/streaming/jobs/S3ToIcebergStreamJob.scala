@@ -1,19 +1,17 @@
 package org.apache.spark.sql.streaming.jobs
 
-import org.apache.hudi.DataSourceWriteOptions._
-import org.apache.hudi.config.HoodieWriteConfig
-import org.apache.hudi.hive.MultiPartKeysValueExtractor
-import org.apache.hudi.keygen.ComplexKeyGenerator
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.expressions.UserDefinedFunction
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.streaming.OutputMode
+import org.apache.spark.sql.streaming.{OutputMode, Trigger}
 import org.apache.spark.sql.streaming.utils.Config
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession}
-import org.joda.time.LocalDateTime
 
-object S3ToHudiOptStreamJob extends Logging {
+import java.util.concurrent.TimeUnit
+
+object S3ToIcebergStreamJob extends Logging {
+
   def main(args: Array[String]) {
     // We have to always pass the first argument as either cloud or local. local is Macbook
     if (args.length == 0) {
@@ -38,6 +36,11 @@ object S3ToHudiOptStreamJob extends Logging {
       .config("spark.hadoop.fs.s3a.endpoint", "s3.amazonaws.com")
       .config("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
       .config("spark.dynamicAllocation.enabled", "false")
+      .config("spark.sql.catalog.glue_catalog", "org.apache.iceberg.spark.SparkCatalog")
+      .config("spark.sql.catalog.glue_catalog.warehouse", "s3://bhupiiceberg/csvglue")
+      .config("spark.sql.catalog.glue_catalog.catalog-impl", "org.apache.iceberg.aws.glue.GlueCatalog")
+      .config("spark.sql.catalog.glue_catalog.io-impl", "org.apache.iceberg.aws.s3.S3FileIO")
+      .config("spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions")
       .getOrCreate()
     spark.sparkContext.setLogLevel(Config().getString("normv2.loggerLevel"))
     spark.sqlContext.udf.register("uuid", uuid)
@@ -53,7 +56,6 @@ object S3ToHudiOptStreamJob extends Logging {
       .add("CustomerID", DoubleType)
       .add("Country", StringType)
       .add("InvoiceTimestamp", TimestampType)
-      //.add("UUID", StringType)
 
     //E Extract: Read data from SNS SQS Streaming Source
     val strmdf = spark
@@ -75,36 +77,19 @@ object S3ToHudiOptStreamJob extends Logging {
 
     // Create and start query, write in 2 modes Plain Parquet and Hudi
     //L Load: Loading Data back to Data Lake S3
-    // Bulk Insert https://github.com/apache/hudi/issues/2639
-    //https://www.onehouse.ai/blog/apache-hudi-vs-delta-lake-transparent-tpc-ds-lakehouse-performance-benchmarks
 
-    val query = augdf
-      .writeStream
-      .format("hudi")
-      .option(RECORDKEY_FIELD.key(), "UUID")
-      .option(PRECOMBINE_FIELD.key(), "NormalizedTimestamp")
-      .option(PARTITIONPATH_FIELD.key(), "Date,Country")
-      .option(KEYGENERATOR_CLASS_NAME.key(), classOf[ComplexKeyGenerator].getName())
-      .option("hoodie.datasource.write.row.writer.enable", "false")
-      .option("hoodie.table.name", "defsec_hudis3list")
-      .option("hoodie.datasource.write.table.name", "defsec_hudis3list")
-      .option("hoodie.datasource.write.hive_style_partitioning", "true")
-      .option("hoodie.datasource.write.operation", "bulk_insert")
-      .option("hoodie.combine.before.insert", "false")
-      .option("hoodie.bulkinsert.sort.mode", "NONE")
-      .option("hoodie.parquet.compression.codec", "snappy")
-      .option("hoodie.populate.meta.fields", "false")
-      .option("hoodie.metadata.enable", "false")
-      //.option("hoodie.parquet.max.file.size", "141557760") // 135Mb
-      //.option("hoodie.parquet.block.size", "141557760") // 135Mb
-      .queryName("s3ToHudiOptStreamJob")
-      .option("checkpointLocation", Config().getString("normv2.checkpointLocation")+"hudis3list_opt/")
-      .option("path", Config().getString("normv2.sinkPath")+"hudis3list_opt/")
-      .outputMode(OutputMode.Append())
-      .start()
-
-    query.awaitTermination()
+   val query = augdf
+     .writeStream
+     .format("iceberg")
+     .trigger(Trigger.ProcessingTime(20, TimeUnit.SECONDS))
+     .option("checkpointLocation", Config().getString("normv2.checkpointLocation")+"icebergs3list/")
+     .option("path", "glue_catalog.retaildb.csvgluetable")
+     .option("fanout-enabled", "true")
+     .outputMode(OutputMode.Append())
+     .start()
+    spark.streams.awaitAnyTermination()
   }
 
   def uuid: UserDefinedFunction = udf(() => java.util.UUID.randomUUID().toString)
+
 }
