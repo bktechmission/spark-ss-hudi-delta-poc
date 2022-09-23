@@ -75,14 +75,6 @@ object S3ToHudiStreamJob extends Logging {
 
     // Create and start query, write in 2 modes Plain Parquet and Hudi
     //L Load: Loading Data back to Data Lake S3
-    /*
-    val query = augdf
-      .writeStream
-      .foreachBatch (persist_DF _)
-      .queryName("s3ToHudiStreamJob")
-      .option("checkpointLocation", Config().getString("normv2.checkpointLocation")+"hudi/")
-      .start()
-    */
     val query = augdf
       .writeStream
       .format("hudi")

@@ -5,7 +5,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.streaming.utils.Config
 
 
-object S3HudiBatchReader extends Logging {
+object S3DeltaBatchReader extends Logging {
   def main(args: Array[String]) {
     // We have to always pass the first argument as either cloud or local. local is Macbook
     if (args.length == 0) {
@@ -34,37 +34,36 @@ object S3HudiBatchReader extends Logging {
     spark.sparkContext.setLogLevel(Config().getString("normv2.loggerLevel"))
     import spark.sqlContext.implicits._
 
-    //////////////////////////// HUDI Reader ///////////////////////////////
+    //////////////////////////// delta read  ///////////////////////////////
     var stTime = System.currentTimeMillis();
-    val hudi_df = spark.read
-      .format("org.apache.hudi")
-      .load(Config().getString("normv2.sinkPath")+"hudis3list_opt/")
+    val delta_df = spark.read
+      .format("delta")
+      .load(Config().getString("normv2.sinkPath")+"deltas3list/")
     var endTime = System.currentTimeMillis();
-    println("Total HUDI LOAD time: " + (endTime - stTime) / 1000 + "seconds")
+    println("Total DELTA LOAD time: " + (endTime - stTime) / 1000 + "seconds")
 
     stTime = System.currentTimeMillis();
-    println("Records hudi_df.count: " + hudi_df.count)
+    println("Records delta_df.count: " + delta_df.count)
     endTime = System.currentTimeMillis();
-    println("Time taken by HUDI hudi_df.count: " + (endTime - stTime) / 1000 + "seconds")
+    println("Time taken by DELTA delta_df.count: " + (endTime - stTime) / 1000 + "seconds")
 
     stTime = System.currentTimeMillis();
-    val agg_hudi_count = hudi_df.groupBy($"StockCode").count().count()
-    println("Records hudi_df.groupBy($StockCode).count().count(): " + agg_hudi_count)
+    val agg_delta_count = delta_df.groupBy($"StockCode").count().count()
+    println("Records delta_df.groupBy($StockCode).count().count(): " + agg_delta_count)
     endTime = System.currentTimeMillis();
-    println("Time taken by HUDI hudi_df.groupBy($StockCode).count().count(): " + (endTime - stTime) / 1000 + "seconds")
+    println("Time taken by DELTA delta_df.groupBy($StockCode).count().count(): " + (endTime - stTime) / 1000 + "seconds")
 
     stTime = System.currentTimeMillis();
-    val hudi_distinct_count = hudi_df.select($"StockCode").distinct.count
-    println("Records hudi_df.select($StockCode).distinct.count : " + hudi_distinct_count)
+    val delta_distinct_count = delta_df.select($"StockCode").distinct.count
+    println("Records delta_df.select($StockCode).distinct.count : " + delta_distinct_count)
     endTime = System.currentTimeMillis();
-    println("Time taken by HUDI hudi_df.select($StockCode).distinct.count: " + (endTime - stTime) / 1000 + "seconds")
+    println("Time taken by DELTA delta_df.select($StockCode).distinct.count: " + (endTime - stTime) / 1000 + "seconds")
 
     stTime = System.currentTimeMillis();
-    println("Total hudi_df srno count > 1: ")
-    val srnoagghudi = hudi_df.groupBy($"srno").count().where($"count" > 1)
-    srnoagghudi.show()
+    println("Total delta_df srno count > 1: ")
+    val srnoaggdelta = delta_df.groupBy($"srno").count().where($"count" > 1)
+    srnoaggdelta.show()
     endTime = System.currentTimeMillis();
-    println("Time taken by HUDI hudi_df.groupBy($srno).count().where($count > 1) : " + (endTime - stTime) / 1000 + "seconds")
-
+    println("Time taken by DELTA delta_df.groupBy($srno).count().where($count > 1) : " + (endTime - stTime) / 1000 + "seconds")
   }
 }

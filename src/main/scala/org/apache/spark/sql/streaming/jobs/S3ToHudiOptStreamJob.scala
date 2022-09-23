@@ -73,7 +73,7 @@ object S3ToHudiOptStreamJob extends Logging {
       .withColumn("NormalizedTimestamp", current_timestamp())
       .withColumn("UUID", uuid())
 
-    // Create and start query, write in 2 modes Plain Parquet and Hudi
+    // Create and start query, write in Hudi
     //L Load: Loading Data back to Data Lake S3
     // Bulk Insert https://github.com/apache/hudi/issues/2639
     //https://www.onehouse.ai/blog/apache-hudi-vs-delta-lake-transparent-tpc-ds-lakehouse-performance-benchmarks

@@ -5,7 +5,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.streaming.utils.Config
 
 
-object S3IceBatchReader extends Logging {
+object S3IcebergBatchReader extends Logging {
   def main(args: Array[String]) {
     // We have to always pass the first argument as either cloud or local. local is Macbook
     if (args.length == 0) {
@@ -40,20 +40,37 @@ object S3IceBatchReader extends Logging {
     import spark.sqlContext.implicits._
 
     // delta read
-    val stTime = System.currentTimeMillis();
+    var stTime = System.currentTimeMillis();
     val ice_df = spark.read
       .format("iceberg")
       .load("glue_catalog.retaildb.csvgluetable")
+    var endTime = System.currentTimeMillis();
+    println("Total ICEBERG LOAD time: " + (endTime - stTime) / 1000 + "seconds")
 
-    println("Total records ice_df.count " + ice_df.count)
-    val agg_ice = ice_df.groupBy($"StockCode").count()
-    println("Total Stock Codes agg_ice.count: " + agg_ice.count + " distinct:" + ice_df.select($"StockCode").distinct.count)
-    val endTime = System.currentTimeMillis();
-    println("Total iceberg show time: " + (endTime - stTime) / 1000 + "seconds")
+    stTime = System.currentTimeMillis();
+    println("Records ice_df.count: " + ice_df.count)
+    endTime = System.currentTimeMillis();
+    println("Time taken by  ICEBERG ice_df.count: " + (endTime - stTime) / 1000 + "seconds")
 
+    stTime = System.currentTimeMillis();
+    val agg_ice = ice_df.groupBy($"StockCode").count().count()
+    println("Records ice_df.groupBy($StockCode).count().count(): " + agg_ice)
+    endTime = System.currentTimeMillis();
+    println("Time taken by ICEBERG ice_df.groupBy($StockCode).count().count(): " + (endTime - stTime) / 1000 + "seconds")
+
+    stTime = System.currentTimeMillis();
+    val distinct_count = ice_df.select($"StockCode").distinct.count
+    println("Records ice_df.select($StockCode).distinct.count : "+ distinct_count)
+    endTime = System.currentTimeMillis();
+    println("Time taken by ICEBERG ice_df.select($StockCode).distinct.count: " + (endTime - stTime) / 1000 + "seconds")
+
+    stTime = System.currentTimeMillis();
     println("Total ice_df srno count > 1: ")
     val srnoaggice = ice_df.groupBy($"srno").count().where($"count" > 1)
     srnoaggice.show()
+    endTime = System.currentTimeMillis();
+    println("Time taken by ICEBERG ice_df.groupBy($srno).count().where($count > 1) : " + (endTime - stTime) / 1000 + "seconds")
+
 
   }
 }
