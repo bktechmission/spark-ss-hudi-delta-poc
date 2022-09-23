@@ -62,7 +62,7 @@ object S3ToIcebergStreamJob extends Logging {
       .readStream
       .format(Config().getString("normv2.sourceFormat"))
       .schema(retailDataSchema)
-      .option("maxFilesPerTrigger", Config().getString("normv2.maxFilesPerTrigger"))
+      //.option("maxFilesPerTrigger", Config().getString("normv2.maxFilesPerTrigger"))
       .option("header", "true")
       .load(Config().getString("normv2.sourcePath"))
 
@@ -75,13 +75,13 @@ object S3ToIcebergStreamJob extends Logging {
       .withColumn("NormalizedTimestamp", current_timestamp())
       .withColumn("UUID", uuid())
 
-    // Create and start query, write in 2 modes Plain Parquet and Hudi
+    // Create and start query, write in Iceberg
     //L Load: Loading Data back to Data Lake S3
 
    val query = augdf
      .writeStream
      .format("iceberg")
-     .trigger(Trigger.ProcessingTime(20, TimeUnit.SECONDS))
+     .trigger(Trigger.Once())
      .option("checkpointLocation", Config().getString("normv2.checkpointLocation")+"icebergs3list/")
      .option("path", "glue_catalog.retaildb.csvgluetable")
      .option("fanout-enabled", "true")

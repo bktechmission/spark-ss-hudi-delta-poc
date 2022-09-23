@@ -57,7 +57,7 @@ object S3ToDeltaStreamJob extends Logging {
       .readStream
       .format(Config().getString("normv2.sourceFormat"))
       .schema(retailDataSchema)
-      .option("maxFilesPerTrigger", Config().getString("normv2.maxFilesPerTrigger"))
+      //.option("maxFilesPerTrigger", Config().getString("normv2.maxFilesPerTrigger"))
       .option("header", "true")
       .load(Config().getString("normv2.sourcePath"))
 
@@ -70,14 +70,14 @@ object S3ToDeltaStreamJob extends Logging {
       .withColumn("NormalizedTimestamp", current_timestamp())
       .withColumn("UUID", uuid())
 
-    // Create and start query, write in 2 modes Plain Parquet and Hudi
+    // Create and start query, write in Delta
     //L Load: Loading Data back to Data Lake S3
 
    val query = augdf
       .writeStream
      .format("delta")
      .partitionBy("Date", "Country")
-     .trigger(Trigger.ProcessingTime(20, TimeUnit.SECONDS))
+     .trigger(Trigger.Once())
      .option("checkpointLocation", Config().getString("normv2.checkpointLocation")+"deltas3list/")
      .option("path", Config().getString("normv2.sinkPath")+"deltas3list/")
      .outputMode(OutputMode.Append())

@@ -68,7 +68,7 @@ object S3ToParquetStreamJob extends Logging {
       .withColumn("NormalizedTimestamp", current_timestamp())
       .withColumn("UUID", uuid())
 
-    // Create and start query, write in 2 modes Plain Parquet and Hudi
+    // Create and start query, write in Parquet
     //L Load: Loading Data back to Data Lake S3
 
    val query = augdf
