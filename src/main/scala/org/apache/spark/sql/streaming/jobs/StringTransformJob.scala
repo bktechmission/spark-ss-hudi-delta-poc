@@ -30,16 +30,32 @@ object StringTransformJob {
       .add("InvoiceTimestamp", TimestampType)*/
     import spark.sqlContext.implicits._
     val path = "/Users/bpanwar/Desktop/file1.txt"
-    //val jsonString1 = """{"Zipcode":704,"ZipCodeType":"STANDARD1","City":"PARC PARQUE1","State":"PR1"}"""
-     // val jsonString2 = """{"Zipcode":705,"ZipCodeType":"STANDARD2","City":"PARC PARQUE2","State":"PR2"}"""
-    //val data = Seq((1, jsonString1)).add(2, jsonString2)
-    val df = spark.read.textFile(path)
-    df.show(false)
-    val df6 = spark.read.option("mergeSchema", true).json(df)
+    val df9 = spark.read.textFile(path)
+    df9.show(false)
+    val df6 = spark.read.option("mergeSchema", true).json(df9)
     df6.printSchema()
     df6.show(false)
 
-   /* import org.apache.spark.sql.functions.{from_json, col}
+    val jsonString1 = """{"Zipcode":704,"ZipCodeType":"STANDARD1","City":"PARC PARQUE1","State":"PR1"}"""
+    val jsonString2 = """{"Zipcode":705,"ZipCodeType":"STANDARD2","City":"PARC PARQUE2","StateMap": {"State":"PR2"}}"""
+    val jsonString3 = """{"Zipcode":706,"ZipCodeType":"STANDARD3","City":"PARC PARQUE3","StateMap": {"State":"PR3"}}"""
+    val jsonString4 = """{"Zipcode":707,"ZipCodeType":"STANDARD4","CityArr":["PARC PARQUE4", "PARQUE4"],"StateMap": {"State":"PR4"}}"""
+
+    val data = Seq((1, jsonString1),(2, jsonString2),(3, jsonString3),(4, jsonString4))
+    import org.apache.spark.sql.functions.{from_json, col}
+    val df = data.toDF("id", "value")
+    df.show()
+    df.printSchema()
+    val uberLevelSchema = spark.read.json(df.select("value").as[String]).schema
+    val df2 = df.withColumn("value",
+      from_json(col("value"), uberLevelSchema))
+    df2.show()
+    df2.printSchema()
+    val df3 = df2.select("*", "value.*").drop("value")
+    df3.show(false)
+
+    df3.write.json("/Users/bpanwar/Desktop/sparkout/")
+   /*
     import org.apache.spark.sql.types.{MapType, StringType}
     val df2 = df.withColumn("value", from_json(col("value"), MapType(StringType, StringType)))
     df2.printSchema()
