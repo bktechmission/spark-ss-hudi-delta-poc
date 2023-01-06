@@ -70,7 +70,7 @@ object S3ToParquetStreamJob extends Logging {
 
     // Create and start query, write in Parquet
     //L Load: Loading Data back to Data Lake S3
-
+    //augdf.show();
    val query = augdf
       .writeStream
      .format("parquet")
