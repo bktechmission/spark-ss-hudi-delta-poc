@@ -1,6 +1,7 @@
-package jobs
-import org.apache.spark.sql.{SparkSession, functions}
-import org.apache.spark.sql.functions.{col, hour, minute, second, to_date, to_timestamp}
+package org.apache.spark.sql.streaming.jobs
+
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.functions._
 
 object TestDate extends App {
 
@@ -18,7 +19,8 @@ object TestDate extends App {
     ("2023-01-17T22:30:40.490Z")).toDF("input_timestamp")
 
   df.withColumn("date", to_date(col("input_timestamp")))
-    .withColumn("hour", hour(to_timestamp($"input_timestamp", "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'")))
+    .withColumn("hour", hour($"input_timestamp"))
+    .withColumn("hour_cc", hour(to_timestamp($"input_timestamp", "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'")))
     .withColumn("minute", minute(col("input_timestamp")))
     .withColumn("second", second(col("input_timestamp")))
     .show(false)

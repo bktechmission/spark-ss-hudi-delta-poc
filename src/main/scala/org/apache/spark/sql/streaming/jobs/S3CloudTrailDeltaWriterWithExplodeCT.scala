@@ -8,7 +8,7 @@ import org.apache.spark.sql.streaming.utils.Config
 import org.apache.spark.sql.types._
 
 
-object S3CloudTrailDeltaWriterWithExplodeInRawCT extends Logging {
+object S3CloudTrailDeltaWriterWithExplodeCT extends Logging {
 
   def main(args: Array[String]) {
     // We have to always pass the first argument as either cloud or local. local is Macbook
@@ -151,7 +151,7 @@ object S3CloudTrailDeltaWriterWithExplodeInRawCT extends Logging {
         $"record.eventTime" as "ddi_eventtimestamp",
         $"record.eventSource" as "subtype",
         $"record.awsRegion" as "ddi_awsreg",
-        $"record"
+        $"record.*"
       )
 
     val augEvents = cloudTrailEvents
@@ -159,7 +159,6 @@ object S3CloudTrailDeltaWriterWithExplodeInRawCT extends Logging {
       .withColumn("ddi_normalizedTimestamp", current_timestamp().cast("string"))
       .withColumn("index",  lit("cloudtrail"))
       .withColumn("bu",  lit("falcon"))
-      .withColumn("rawmsg", struct($"record.*"))
 
     //augEvents.printSchema()
     //augEvents.show()
@@ -167,13 +166,13 @@ object S3CloudTrailDeltaWriterWithExplodeInRawCT extends Logging {
     //L Load: Loading Data back to Data Lake S3
 
     val streamingETLQuery = augEvents
-      .drop("timestamp", "record")
+      .drop("timestamp")
       .writeStream
-      .format("json")
+      .format("delta")
       .partitionBy("index", "date", "subtype", "bu")
       //.trigger(Trigger.ProcessingTime(20, TimeUnit.SECONDS))
-      .option("checkpointLocation", Config().getString("normv2.checkpointLocation") + "delta_trails/")
-      .option("path", Config().getString("normv2.sinkPath") + "delta_trails/")
+      .option("checkpointLocation", Config().getString("normv2.checkpointLocation") + "delta_explodedjson/checkpoint/")
+      .option("path", Config().getString("normv2.sinkPath") + "delta_explodedjson/partitioned/")
       .start()
     streamingETLQuery.awaitTermination()
   }

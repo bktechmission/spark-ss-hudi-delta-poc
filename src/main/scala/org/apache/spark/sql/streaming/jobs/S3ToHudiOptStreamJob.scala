@@ -1,17 +1,14 @@
 package org.apache.spark.sql.streaming.jobs
 
 import org.apache.hudi.DataSourceWriteOptions._
-import org.apache.hudi.config.HoodieWriteConfig
-import org.apache.hudi.hive.MultiPartKeysValueExtractor
 import org.apache.hudi.keygen.ComplexKeyGenerator
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.expressions.UserDefinedFunction
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.streaming.utils.Config
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession}
-import org.joda.time.LocalDateTime
 
 object S3ToHudiOptStreamJob extends Logging {
   def main(args: Array[String]) {
