@@ -8,7 +8,7 @@ import org.apache.spark.sql.streaming.utils.Config
 import org.apache.spark.sql.types._
 
 
-object S3CloudTrailDeltaWriterWithExplodeCT extends Logging {
+object S3CloudTrailDeltaWriterWithNonExplodeCT extends Logging {
 
   def main(args: Array[String]) {
     // We have to always pass the first argument as either cloud or local. local is Macbook
@@ -167,14 +167,14 @@ object S3CloudTrailDeltaWriterWithExplodeCT extends Logging {
 
     val streamingETLQuery = augEvents
       .drop("timestamp")
-      .write
-      .format("json")
+      .writeStream
+      .format("delta")
       .partitionBy("index", "date", "subtype", "bu")
       //.trigger(Trigger.ProcessingTime(20, TimeUnit.SECONDS))
-      .option("checkpointLocation", Config().getString("normv2.checkpointLocation") + "delta_trails/")
-      .option("path", Config().getString("normv2.sinkPath") + "delta_trails/")
-      .save()
-    //streamingETLQuery.awaitTermination()
+      .option("checkpointLocation", Config().getString("normv2.checkpointLocation") + "delta_rawstring/checkpoint/")
+      .option("path", Config().getString("normv2.sinkPath") + "delta_rawstring/partitioned/")
+      .start()
+    streamingETLQuery.awaitTermination()
   }
 
   def uuid: UserDefinedFunction = udf(() => java.util.UUID.randomUUID().toString)

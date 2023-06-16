@@ -8,7 +8,7 @@ import org.apache.spark.sql.streaming.utils.Config
 import org.apache.spark.sql.types._
 
 
-object S3CloudTrailDeltaWriterWithExplodeCT extends Logging {
+object S3CloudTrailDeltaWriterWithExplodeInRawCT extends Logging {
 
   def main(args: Array[String]) {
     // We have to always pass the first argument as either cloud or local. local is Macbook
@@ -169,11 +169,11 @@ object S3CloudTrailDeltaWriterWithExplodeCT extends Logging {
     val streamingETLQuery = augEvents
       .drop("timestamp", "record")
       .writeStream
-      .format("json")
+      .format("delta")
       .partitionBy("index", "date", "subtype", "bu")
       //.trigger(Trigger.ProcessingTime(20, TimeUnit.SECONDS))
-      .option("checkpointLocation", Config().getString("normv2.checkpointLocation") + "delta_trails/")
-      .option("path", Config().getString("normv2.sinkPath") + "delta_trails/")
+      .option("checkpointLocation", Config().getString("normv2.checkpointLocation") + "delta_explodedinraw/checkpoint/")
+      .option("path", Config().getString("normv2.sinkPath") + "delta_explodedinraw/partitioned/")
       .start()
     streamingETLQuery.awaitTermination()
   }

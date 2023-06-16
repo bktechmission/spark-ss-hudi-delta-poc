@@ -10,7 +10,7 @@ import org.apache.hudi.hive.MultiPartKeysValueExtractor
 import org.apache.hudi.keygen.ComplexKeyGenerator
 import org.apache.spark.sql.expressions.UserDefinedFunction
 import org.apache.spark.sql.streaming.OutputMode
-import org.joda.time.LocalDateTime
+import java.time.LocalDateTime
 import org.apache.spark.sql.streaming.utils.Config
 
 object S3ToHudiStreamJob extends Logging {

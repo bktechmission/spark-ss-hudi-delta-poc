@@ -1,17 +1,18 @@
 package org.apache.spark.sql.streaming.jobs
 
-import org.apache.hudi.DataSourceWriteOptions.{HIVE_PARTITION_EXTRACTOR_CLASS_OPT_KEY, HIVE_PARTITION_FIELDS, HIVE_PARTITION_FIELDS_OPT_KEY, HIVE_STYLE_PARTITIONING_OPT_KEY, HIVE_SYNC_ENABLED_OPT_KEY, HIVE_TABLE_OPT_KEY, INSERT_OPERATION_OPT_VAL, KEYGENERATOR_CLASS_NAME, KEYGENERATOR_CLASS_OPT_KEY, OPERATION_OPT_KEY, PARTITIONPATH_FIELD, PARTITIONPATH_FIELD_OPT_KEY, PRECOMBINE_FIELD, PRECOMBINE_FIELD_OPT_KEY, RECORDKEY_FIELD, RECORDKEY_FIELD_OPT_KEY, STREAMING_IGNORE_FAILED_BATCH, STREAMING_RETRY_CNT, TABLE_TYPE, TABLE_TYPE_OPT_KEY, UPSERT_OPERATION_OPT_VAL}
+import org.apache.hudi.DataSourceWriteOptions._
 import org.apache.hudi.config.HoodieWriteConfig
 import org.apache.hudi.hive.MultiPartKeysValueExtractor
 import org.apache.hudi.keygen.ComplexKeyGenerator
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.expressions.UserDefinedFunction
-import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession}
 import org.apache.spark.sql.functions.{current_timestamp, to_date, to_timestamp, udf}
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.streaming.utils.Config
 import org.apache.spark.sql.types._
-import org.joda.time.LocalDateTime
+import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession}
+
+import java.time.LocalDateTime
 
 object S3SQSToHudiStreamJob extends Logging {
   def main(args: Array[String]) {

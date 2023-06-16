@@ -1,9 +1,6 @@
-package jobs;
+package org.apache.spark.sql.streaming.jobs;
 
-import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.*;
-import org.apache.spark.sql.SparkSession;
-import scala.Tuple2;
 import scala.collection.immutable.Map;
 
 import java.util.ArrayList;
