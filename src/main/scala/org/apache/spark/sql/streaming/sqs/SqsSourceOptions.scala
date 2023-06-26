@@ -1,15 +1,15 @@
 package org.apache.spark.sql.streaming.sqs
 
-import scala.util.Try
-
-import org.apache.spark.internal.Logging
+import com.typesafe.scalalogging.LazyLogging
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.util.Utils
+
+import scala.util.Try
 
 /**
  * User specified options for sqs source.
  */
-class SqsSourceOptions(parameters: CaseInsensitiveMap[String]) extends Logging {
+class SqsSourceOptions(parameters: CaseInsensitiveMap[String]) extends LazyLogging {
 
   object S3MessageWrapper extends Enumeration {
     type MessageFormat = Value
@@ -43,10 +43,10 @@ class SqsSourceOptions(parameters: CaseInsensitiveMap[String]) extends Logging {
   val maxFileAgeMs: Long =
     Utils.timeStringAsMs(parameters.getOrElse("maxFileAge", "7d"))
 
-  val fetchIntervalSeconds: Int = parameters.get("sqsFetchIntervalSeconds").map { str =>
+  val fetchIntervalInSeconds: Int = parameters.get("fetchIntervalInSeconds").map { str =>
     Try(str.toInt).toOption.filter(_ > 0).getOrElse {
       throw new IllegalArgumentException(
-        s"Invalid value '$str' for option 'sqsFetchIntervalSeconds', must be a positive integer")
+        s"Invalid value '$str' for option 'fetchIntervalInSeconds', must be a positive integer")
     }
   }.getOrElse(10)
 
@@ -64,13 +64,6 @@ class SqsSourceOptions(parameters: CaseInsensitiveMap[String]) extends Logging {
         s"Invalid value '$str' for option 'sqsMaxRetries', must be a positive integer")
     }
   }.getOrElse(10)
-
-  val maxConnections: Int = parameters.get("sqsMaxConnections").map { str =>
-    Try(str.toInt).toOption.filter(_ > 0).getOrElse {
-      throw new IllegalArgumentException(
-        s"Invalid value '$str' for option 'sqsMaxConnections', must be a positive integer")
-    }
-  }.getOrElse(1)
 
   val sqsUrl: String = parameters.get("sqsUrl").getOrElse{
     throw new IllegalArgumentException("SQS Url is not specified")

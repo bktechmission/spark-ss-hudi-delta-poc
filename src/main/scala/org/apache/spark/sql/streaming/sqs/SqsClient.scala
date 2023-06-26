@@ -1,38 +1,38 @@
 package org.apache.spark.sql.streaming.sqs
 
-import java.text.SimpleDateFormat
-import java.util.TimeZone
-import java.util.concurrent.TimeUnit
-
-import scala.collection.JavaConverters._
-
-import com.amazonaws.{AmazonClientException, AmazonServiceException, ClientConfiguration}
+import com.amazonaws.auth.profile.ProfileCredentialsProvider
+import com.amazonaws.services.s3.event.S3EventNotification
+import com.amazonaws.services.s3.event.S3EventNotification.S3EventNotificationRecord
+import com.amazonaws.services.sqs.model.{DeleteMessageBatchRequestEntry, GetQueueAttributesRequest, Message, ReceiveMessageRequest}
 import com.amazonaws.services.sqs.{AmazonSQS, AmazonSQSClientBuilder}
-import com.amazonaws.services.sqs.model.{DeleteMessageBatchRequestEntry, Message, ReceiveMessageRequest}
+import com.amazonaws.util.json.Jackson
+import com.amazonaws.{AmazonClientException, AmazonServiceException, ClientConfiguration}
+import com.fasterxml.jackson.core.JsonProcessingException
+import com.typesafe.scalalogging.LazyLogging
 import org.apache.hadoop.conf.Configuration
-import org.json4s.{DefaultFormats, MappingException}
-import org.json4s.JsonAST.{JNothing, JValue}
-import org.json4s.jackson.JsonMethods.parse
-
 import org.apache.spark.SparkException
-import org.apache.spark.internal.Logging
+import org.apache.spark.sql.functions.struct
 import org.apache.spark.util.ThreadUtils
 
-class SqsClient(sourceOptions: SqsSourceOptions,
-                hadoopConf: Configuration) extends Logging {
+import java.time.format.DateTimeFormatter
+import java.time.{LocalDateTime, ZoneId}
+import java.util.concurrent.TimeUnit
+import scala.collection.JavaConverters._
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.Future
 
-  private val sqsFetchIntervalSeconds = sourceOptions.fetchIntervalSeconds
+class SqsClient(sourceOptions: SqsSourceOptions,
+                hadoopConf: Configuration) extends LazyLogging {
+  private val maxMessagesPerBatchSize = 10L
+  private val sqsFetchIntervalInSeconds = sourceOptions.fetchIntervalInSeconds
   private val sqsLongPollWaitTimeSeconds = sourceOptions.longPollWaitTimeSeconds
   private val sqsMaxRetries = sourceOptions.maxRetries
-  private val maxConnections = sourceOptions.maxConnections
-  private val ignoreFileDeletion = sourceOptions.ignoreFileDeletion
+  private val totalFilesToFetch = sourceOptions.maxFilesPerTrigger
   private val region = sourceOptions.region
   val sqsUrl = sourceOptions.sqsUrl
 
   @volatile var exception: Option[Exception] = None
-
-  private val timestampFormat = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'") // ISO8601
-  timestampFormat.setTimeZone(TimeZone.getTimeZone("UTC"))
+  private val ZDT_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'")
   private var retriesOnFailure = 0
   private val sqsClient = createSqsClient()
 
@@ -42,39 +42,68 @@ class SqsClient(sourceOptions: SqsSourceOptions,
 
   val deleteMessageQueue = new java.util.concurrent.ConcurrentLinkedQueue[String]()
 
-  private val sqsFetchMessagesThread = new Runnable {
-    override def run(): Unit = {
-      try {
-        // Fetching messages from Amazon SQS
-        val newMessages = sqsFetchMessages()
-
-        // Filtering the new messages which are already not seen
-        if (newMessages.nonEmpty) {
-          newMessages.filter(message => sqsFileCache.isNewFile(message._1, message._2))
-            .foreach(message =>
-              sqsFileCache.add(message._1, MessageDescription(message._2, false, message._3)))
-        }
-      } catch {
-        case e: Exception =>
-          exception = Some(e)
+  private def sqsFetchMessagesJobFuture[String] = Future {
+    try {
+      // Fetching messages from Amazon SQS
+      val newMessages = sqsFetchMessages()
+      // Filtering the new messages which are already not seen
+      if (newMessages.nonEmpty) {
+        logger.debug(s"newMessages size is ${newMessages.size}")
+        newMessages.filter(message => sqsFileCache.isNewFile(message._1))
+          .foreach(message =>
+            sqsFileCache.add(message._1, MessageDescription(message._2, false, message._3)))
       }
+      "Success"
+    } catch {
+      case e: Exception =>
+        exception = Some(e)
+        "Failure"
     }
   }
 
   sqsScheduler.scheduleWithFixedDelay(
-    sqsFetchMessagesThread,
-    0,
-    sqsFetchIntervalSeconds,
-    TimeUnit.SECONDS)
+    // this pattern uses pool to submit sqs requests asap, exhaust all thread, otherwise it was causing one req at a time
+    // it fills up the cache which is used by SqsSource Dataframe generation
+    () => {
+      var totalFilesNeeded = totalFilesToFetch.get.toLong
+      val soFarUncommittedFiles = sqsFileCache.getUncommittedFiles(Int.MaxValue).size
+      logger.info(s"totalFilesNeeded is set to: ${totalFilesNeeded} and " +
+        s"soFarUncommittedFiles is ${soFarUncommittedFiles} and Cache Map size is ${sqsFileCache.size}")
+      //if we already have enough messages
+      if(soFarUncommittedFiles < (3*totalFilesNeeded)) {
+        // get sqs stats
+        val sqsStats = getSQSStats();
+        sqsStats.foreach({ keyVal => logger.debug(s"Sqs stats [k,v] pairs:  ${keyVal._1}=${keyVal._2}") })
+        val numOfSQSReq = totalFilesNeeded / maxMessagesPerBatchSize // each sqs req max files it can get is 10
+
+        // we keep 3 x the totalFilesNeeded to buffer
+        val numOfSQSNotifications = sqsStats.get("ApproximateNumberOfMessages").get.toLong
+        if (totalFilesNeeded > numOfSQSNotifications) {
+          totalFilesNeeded = numOfSQSNotifications;
+        }
+        logger.info(s"numOfSQSNotifications available is sqs: ${numOfSQSNotifications}")
+        //build all numOfSQSReq futures
+        val sqsCallsFutures = List.fill(numOfSQSReq.toInt)(sqsFetchMessagesJobFuture)
+        // wait for 1mints to all calls to finish
+        Future.sequence(sqsCallsFutures)
+        logger.debug(s"Waiting for ${numOfSQSReq} calls to finish")
+      }
+    },0, sqsFetchIntervalInSeconds, TimeUnit.SECONDS)
+
+  private def getSQSStats(): Map[String, String] = {
+    sqsClient.getQueueAttributes(new GetQueueAttributesRequest(sqsUrl, List("All").asJava)).getAttributes().asScala.toMap
+  }
 
   private def sqsFetchMessages(): Seq[(String, Long, String)] = {
     val messageList = try {
       val receiveMessageRequest = new ReceiveMessageRequest()
         .withQueueUrl(sqsUrl)
         .withWaitTimeSeconds(sqsLongPollWaitTimeSeconds)
+        .withMaxNumberOfMessages(maxMessagesPerBatchSize.toInt)
+        .withVisibilityTimeout(1800)// hide messages for 30m
       val messages = sqsClient.receiveMessage(receiveMessageRequest).getMessages.asScala
       retriesOnFailure = 0
-      logDebug(s"successfully received ${messages.size} messages")
+      logger.debug(s"successfully received ${messages.size} messages")
       messages
     } catch {
       case ase: AmazonServiceException =>
@@ -83,10 +112,10 @@ class SqsClient(sourceOptions: SqsSourceOptions,
             |Caught an AmazonServiceException, which means your request made it to Amazon SQS,
             | rejected with an error response for some reason.
         """.stripMargin
-        logWarning(message)
-        logWarning(s"Error Message: ${ase.getMessage}")
-        logWarning(s"HTTP Status Code: ${ase.getStatusCode}, AWS Error Code: ${ase.getErrorCode}")
-        logWarning(s"Error Type: ${ase.getErrorType}, Request ID: ${ase.getRequestId}")
+        logger.warn(message)
+        logger.warn(s"Error Message: ${ase.getMessage}")
+        logger.warn(s"HTTP Status Code: ${ase.getStatusCode}, AWS Error Code: ${ase.getErrorCode}")
+        logger.warn(s"Error Type: ${ase.getErrorType}, Request ID: ${ase.getRequestId}")
         evaluateRetries()
         List.empty
       case ace: AmazonClientException =>
@@ -96,14 +125,14 @@ class SqsClient(sourceOptions: SqsSourceOptions,
             | internal problem while trying to communicate with Amazon SQS, such as not
             |  being able to access the network.
         """.stripMargin
-        logWarning(message)
-        logWarning(s"Error Message: ${ace.getMessage()}")
+        logger.warn(message)
+        logger.warn(s"Error Message: ${ace.getMessage()}")
         evaluateRetries()
         List.empty
       case e: Exception =>
         val message = "Received unexpected error from SQS"
-        logWarning(message)
-        logWarning(s"Error Message: ${e.getMessage()}")
+        logger.warn(message)
+        logger.warn(s"Error Message: ${e.getMessage()}")
         evaluateRetries()
         List.empty
     }
@@ -114,87 +143,58 @@ class SqsClient(sourceOptions: SqsSourceOptions,
     }
   }
 
-  private def tryToParseSNS(parsedBody: JValue): JValue = {
-    implicit val formats = DefaultFormats
-    parsedBody \ "Message" match {
-      case JNothing => throw new MappingException("Original message does not look like SNS one. " +
-        "Please check your setup and make sure it is S3 notification event coming from SNS")
-      case value => parse(value.extract[String])
-    }
-  }
-
-  private def extractS3Message(parsedBody: JValue): JValue = {
-    sourceOptions.messageWrapper match {
-      case sourceOptions.S3MessageWrapper.None => parsedBody
-      case sourceOptions.S3MessageWrapper.SNS => tryToParseSNS(parsedBody)
-    }
-  }
-
   private def parseSqsMessages(messageList: Seq[Message]): Seq[(String, Long, String)] = {
     val errorMessages = scala.collection.mutable.ListBuffer[String]()
-    val parsedMessages = messageList.foldLeft(Seq[(String, Long, String)]()) { (list, message) =>
-      implicit val formats = DefaultFormats
+    var returnMsgSeq = Seq[(String, Long, String)]()
+    messageList.foreach(message => {
       try {
+        // get first handle to remove later from queue
         val messageReceiptHandle = message.getReceiptHandle
+        //  parse body to get bucket name out
+        val body = Jackson.stringMapFromJsonString(message.getBody)
+        if(body.get("Message") != null) {
+          val messageStr: String = body.get("Message")
+          val notification: S3EventNotification = S3EventNotification.parseJson(messageStr)
 
-        val parsedBody: JValue = parse(message.getBody).extract[JValue]
-        val messageJson = extractS3Message(parsedBody)
-
-        val bucketName = (
-          messageJson \ "Records" \ "s3" \ "bucket" \ "name").extract[Array[String]].head
-        val eventName = (messageJson \ "Records" \ "eventName").extract[Array[String]].head
-        if (eventName.contains("ObjectCreated")) {
-          val timestamp = (messageJson \ "Records" \ "eventTime").extract[Array[String]].head
-          val timestampMills = convertTimestampToMills(timestamp)
-          val path = "s3a://" +
-            bucketName + "/" +
-            (messageJson \ "Records" \ "s3" \ "object" \ "key").extract[Array[String]].head
-          logDebug("Successfully parsed sqs message")
-          list :+ ((path, timestampMills, messageReceiptHandle))
-        } else {
-          if (eventName.contains("ObjectRemoved")) {
-            if (!ignoreFileDeletion) {
-              exception = Some(new SparkException("ObjectDelete message detected in SQS"))
-            } else {
-              logInfo("Ignoring file deletion message since ignoreFileDeletion is true")
-            }
-          } else {
-            logWarning("Ignoring unexpected message detected in SQS")
-          }
-          errorMessages.append(messageReceiptHandle)
-          list
+          val records: Seq[S3EventNotificationRecord] = notification.getRecords.asScala
+          returnMsgSeq = returnMsgSeq ++ records // only newly object created events
+            .filter(event => "ObjectCreated:Put".equalsIgnoreCase(event.getEventName))
+            .map(record => (s"s3a://${record.getS3.getBucket.getName}/${record.getS3.getObject.getUrlDecodedKey}",
+              convertTimestampToMills(record.getEventTime.toString),
+              messageReceiptHandle))
         }
       } catch {
-        case me: MappingException =>
+        case jpe: JsonProcessingException => {
           errorMessages.append(message.getReceiptHandle)
-          logWarning(s"Error in parsing SQS message ${me.getMessage}")
-          list
-        case e: Exception =>
+          logger.warn(s"Unexpected JsonProcessingException while parsing SQS message " +
+            s"${message.getBody}  Exception ${jpe.getMessage}")
+        }
+        case ex: Exception => {
           errorMessages.append(message.getReceiptHandle)
-          logWarning(s"Unexpected error while parsing SQS message ${e.getMessage}")
-          list
+          logger.warn(s"Unexpected Exception while parsing SQS message " +
+            s"${message.getBody}  Exception ${ex.getMessage}")
+        }
       }
-    }
+    })
     if (errorMessages.nonEmpty) {
       addToDeleteMessageQueue(errorMessages.toList)
     }
-    parsedMessages
+    returnMsgSeq
   }
 
   private def convertTimestampToMills(timestamp: String): Long = {
-    val timeInMillis = timestampFormat.parse(timestamp).getTime()
-    timeInMillis
+    LocalDateTime.parse(timestamp, ZDT_FORMATTER).atZone(ZoneId.of("UTC")).toInstant.toEpochMilli
   }
 
   private def evaluateRetries(): Unit = {
     retriesOnFailure += 1
     if (retriesOnFailure >= sqsMaxRetries) {
-      logError("Max retries reached")
+      logger.error("Max retries reached")
       exception = Some(new SparkException("Unable to receive Messages from SQS for " +
         s"${sqsMaxRetries} times Giving up. Check logs for details."))
     } else {
-      logWarning(s"Attempt ${retriesOnFailure}." +
-        s"Will reattempt after ${sqsFetchIntervalSeconds} seconds")
+      logger.warn(s"Attempt ${retriesOnFailure}." +
+        s"Will reattempt after ${sqsFetchIntervalInSeconds} seconds")
     }
   }
 
@@ -206,23 +206,28 @@ class SqsClient(sourceOptions: SqsSourceOptions,
       if (!isClusterOnEc2Role) {
         val accessKey = hadoopConf.getTrimmed("fs.s3a.access.key")
         val secretAccessKey = new String(hadoopConf.getPassword("fs.s3a.secret.key")).trim
-        logInfo("Using credentials from keys provided")
-        val basicAwsCredentialsProvider = new BasicAWSCredentialsProvider(
-          accessKey, secretAccessKey)
+        val sessionToken = new String(hadoopConf.getPassword("fs.s3a.session.token")).trim
+        logger.info("Using credentials from keys provided")
+        val basicAwsCredentialsProvider = new BasicSessionCredentialsProvider(accessKey, secretAccessKey, sessionToken);
         AmazonSQSClientBuilder
           .standard()
-          .withClientConfiguration(new ClientConfiguration().withMaxConnections(maxConnections))
+          // https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-throughput-horizontal-scaling-and-batching.html
+          .withClientConfiguration(new ClientConfiguration()
+            .withMaxConnections(totalFilesToFetch.get.toInt /maxMessagesPerBatchSize.toInt)
+            .withTcpKeepAlive(true))
           .withCredentials(basicAwsCredentialsProvider)
           .withRegion(region)
           .build()
       } else {
-        logInfo("Using the credentials attached to the instance")
-        val instanceProfileCredentialsProvider = new InstanceProfileCredentialsProviderWithRetries()
+        logger.info("Using the credentials attached to the instance")
+        //val instanceProfileCredentialsProvider = new InstanceProfileCredentialsProviderWithRetries()
         AmazonSQSClientBuilder
           .standard()
-          .withClientConfiguration(new ClientConfiguration().withMaxConnections(maxConnections))
-          .withCredentials(instanceProfileCredentialsProvider)
+          .withClientConfiguration(new ClientConfiguration()
+            .withMaxConnections(totalFilesToFetch.get / maxMessagesPerBatchSize.toInt)
+            .withTcpKeepAlive(true))
           .withRegion(region)
+          .withCredentials(new ProfileCredentialsProvider())
           .build()
       }
     } catch {
@@ -236,9 +241,10 @@ class SqsClient(sourceOptions: SqsSourceOptions,
   }
 
   def deleteMessagesFromQueue(): Unit = {
+    var messageReceiptHandles = List[String]()
     try {
       var count = -1
-      val messageReceiptHandles = deleteMessageQueue.asScala.toList
+      messageReceiptHandles = deleteMessageQueue.asScala.toList
       val messageGroups = messageReceiptHandles.sliding(10, 10).toList
       messageGroups.foreach { messageGroup =>
         val requestEntries = messageGroup.foldLeft(List[DeleteMessageBatchRequestEntry]()) {
@@ -246,6 +252,7 @@ class SqsClient(sourceOptions: SqsSourceOptions,
             count = count + 1
             list :+ new DeleteMessageBatchRequestEntry(count.toString, messageReceiptHandle)
         }.asJava
+        logger.debug(s"Deleted ${requestEntries.size()} committed messages from SQS")
         val batchResult = sqsClient.deleteMessageBatch(sqsUrl, requestEntries)
         if (!batchResult.getFailed.isEmpty) {
           batchResult.getFailed.asScala.foreach { entry =>
@@ -256,8 +263,9 @@ class SqsClient(sourceOptions: SqsSourceOptions,
       }
     } catch {
       case e: Exception =>
-        logWarning(s"Unable to delete message from SQS ${e.getMessage}")
+        logger.warn(s"Unable to delete message from SQS ${e.getMessage}")
     }
+    logger.info(s"Deleted ${messageReceiptHandles.size} committed messages from SQS")
     deleteMessageQueue.clear()
   }
 

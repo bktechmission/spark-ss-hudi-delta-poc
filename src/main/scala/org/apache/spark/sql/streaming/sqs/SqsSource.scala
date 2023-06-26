@@ -1,22 +1,20 @@
 package org.apache.spark.sql.streaming.sqs
 
-import java.net.URI
-
+import com.typesafe.scalalogging.LazyLogging
 import org.apache.hadoop.fs.Path
-
-import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.execution.datasources.{DataSource, LogicalRelation}
-import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.FileStreamSource._
+import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
+
+import java.net.URI
 
 
 class SqsSource(sparkSession: SparkSession,
                 metadataPath: String,
                 options: Map[String, String],
-                override val schema: StructType) extends Source with Logging {
-
+                override val schema: StructType) extends Source with LazyLogging {
   private val sourceOptions = new SqsSourceOptions(options)
 
   private val hadoopConf = sparkSession.sessionState.newHadoopConf()
@@ -35,24 +33,21 @@ class SqsSource(sparkSession: SparkSession,
 
   private val sqsClient = new SqsClient(sourceOptions, hadoopConf)
 
-  metadataLog.allFiles().foreach { entry =>
-    sqsClient.sqsFileCache.add(entry.path, MessageDescription(entry.timestamp, true, ""))
-  }
   sqsClient.sqsFileCache.purge()
 
-  logInfo(s"maxFilesPerBatch = $maxFilesPerTrigger, maxFileAgeMs = $maxFileAgeMs")
+  logger.debug(s"maxFilesPerBatch = $maxFilesPerTrigger, maxFileAgeMs = $maxFileAgeMs")
 
-   /**
-    * Returns the data that is between the offsets (`start`, `end`].
-    */
+  /**
+   * Returns the data that is between the offsets (`start`, `end`].
+   */
   override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
     val startOffset = start.map(FileStreamSourceOffset(_).logOffset).getOrElse(-1L)
     val endOffset = FileStreamSourceOffset(end).logOffset
-
+    logger.info("Got getBatch call")
     assert(startOffset <= endOffset)
     val files = metadataLog.get(Some(startOffset + 1), Some(endOffset)).flatMap(_._2)
-    logInfo(s"Processing ${files.length} files from ${startOffset + 1}:$endOffset")
-    logTrace(s"Files are:\n\t" + files.mkString("\n\t"))
+    logger.info(s"Processing ${files.length} files from ${startOffset + 1}:$endOffset")
+    logger.debug(s"Files are:\n\t" + files.mkString("\n\t"))
     val newDataSource =
       DataSource(
         sparkSession,
@@ -71,31 +66,30 @@ class SqsSource(sparkSession: SparkSession,
      * All the new files found - ignore aged files and files that we have seen.
      *  Obey user's setting to limit the number of files in this batch trigger.
      */
-    val batchFiles = sqsClient.sqsFileCache.getUncommittedFiles(maxFilesPerTrigger, shouldSortFiles)
-
+    val batchFiles = sqsClient.sqsFileCache.getUncommittedFiles(maxFilesPerTrigger.get)
+    logger.debug(s"fetchMaxOffset created batch of ${batchFiles.size} files")
     if (batchFiles.nonEmpty) {
       metadataLogCurrentOffset += 1
       metadataLog.add(metadataLogCurrentOffset, batchFiles.map {
         case (path, timestamp, receiptHandle) =>
           FileEntry(path = path, timestamp = timestamp, batchId = metadataLogCurrentOffset)
       }.toArray)
-      logInfo(s"Log offset set to $metadataLogCurrentOffset with ${batchFiles.size} new files")
+      logger.debug(s"Log offset set to $metadataLogCurrentOffset with ${batchFiles.size} new files ${shouldSortFiles}")
       val messageReceiptHandles = batchFiles.map {
         case (path, timestamp, receiptHandle) =>
           sqsClient.sqsFileCache.markCommitted(path)
-          logDebug(s"New file: $path")
+          logger.debug(s"Committed file: $path")
           receiptHandle
       }.toList
       sqsClient.addToDeleteMessageQueue(messageReceiptHandles)
     }
 
-    val numPurged = sqsClient.sqsFileCache.purge()
-
     if (!sqsClient.deleteMessageQueue.isEmpty) {
       sqsClient.deleteMessagesFromQueue()
     }
+    val numPurged = sqsClient.sqsFileCache.purge()
 
-    logTrace(
+    logger.debug(
       s"""
          |Number of files selected for batch = ${batchFiles.size}
          |Number of files purged from tracking map = $numPurged
@@ -120,4 +114,3 @@ class SqsSource(sparkSession: SparkSession,
   override def toString: String = s"SqsSource[${sqsClient.sqsUrl}]"
 
 }
-
